@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:context="http://www.springframework.org/schema/context"
+    xmlns:int="http://www.springframework.org/schema/integration"
+    xmlns:int-file="http://www.springframework.org/schema/integration/file"
+    xmlns:sftp="http://www.springframework.org/schema/integration/sftp"
+    xmlns:ftp="http://www.springframework.org/schema/integration/ftp"
+    xmlns:int-stream="http://www.springframework.org/schema/integration/stream"
+    xsi:schemaLocation="http://www.springframework.org/schema/integration/ftp http://www.springframework.org/schema/integration/ftp/spring-integration-ftp.xsd
+		http://www.springframework.org/schema/integration http://www.springframework.org/schema/integration/spring-integration.xsd
+		http://www.springframework.org/schema/integration/file http://www.springframework.org/schema/integration/file/spring-integration-file.xsd
+		http://www.springframework.org/schema/integration/stream http://www.springframework.org/schema/integration/stream/spring-integration-stream.xsd
+		http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+		http://www.springframework.org/schema/integration/sftp http://www.springframework.org/schema/integration/sftp/spring-integration-sftp.xsd
+		http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context.xsd">
+
+	<context:component-scan base-package="com.goSmarter.ftp.inbound" />
+	
+	<int:gateway id="download.gateway"
+		service-interface="com.goSmarter.ftp.inbound.FTPDownloadGateway"
+		default-request-channel="downloadgateway.request.channel"
+		default-reply-channel="downloadgateway.response.channel">   
+        <int:method name="downloadFilesFromBOA" request-channel="boa.file.downloadgateway.request.channel"/>
+    </int:gateway>  
+	
+    <int:channel id="downloadgateway.request.channel" />
+	<int:channel id="downloadgateway.response.channel" />
+	<int:channel id="to.filecountchecker.channel" />
+	<int:channel id="to.getfile.channel"/>
+	<int:channel id="to.getfilestream.channel" />
+	<int:channel id="to.listfile.channel" />
+	<int:channel id="to.splitter.channel" />
+	<int:channel id="to.downloadedfile.channel" />
+	<int:channel id="to.processActivate.channel" />
+
+	<int:bridge input-channel="downloadgateway.request.channel" 
+		output-channel="to.listfile.channel" />
+	
+	<ftp:outbound-gateway id="cic.ftp.inbound.list.messageGateway" session-factory="ftpSessionFactory"
+		request-channel="to.listfile.channel"  command="ls" 
+		command-options="-a" expression="payload"
+		filename-regex=".*\.(txt)"
+		reply-channel="to.splitter.channel"/>
+	 
+	<int:splitter input-channel="to.splitter.channel" 
+		output-channel="to.getfile.channel" />
+	
+  	<ftp:outbound-gateway id="cic.ftp.inbound.get.messageGateway" session-factory="ftpSessionFactory"
+		local-directory="src/test/resources/output/"
+		request-channel="to.getfile.channel"  command="get" 
+		command-options="-P" expression="payload.RemoteDirectory + payload.Filename"
+		reply-channel="to.downloadedfile.channel"/>
+
+	<!-- updated for 11240 Start -->	
+ 	<int:filter 
+ 		input-channel="to.downloadedfile.channel" 
+ 		output-channel="to.deletefile.channel" 
+	    discard-channel="to.processActivate.channel"
+	    expression="true">
+	</int:filter> 
+
+	<ftp:outbound-gateway id="cic.ftp.inbound.delete.messageGateway" 
+		session-factory="ftpSessionFactory"
+		request-channel="to.deletefile.channel"  
+ 		expression="headers['file_remoteDirectory'] + headers['file_remoteFile']"		
+		command="rm" 
+		reply-channel="to.processActivate.channel"/> 
+
+	<int:logging-channel-adapter channel="to.processActivate.channel" level="INFO"
+	  expression="'Downloaded ' + headers"/>
+ 
+	<!-- updated for 11240 End -->
+	<int-stream:stderr-channel-adapter channel="errorChannel"
+		append-newline="true" />
+</beans>
