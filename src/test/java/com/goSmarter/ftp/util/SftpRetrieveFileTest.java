@@ -44,7 +44,7 @@ public class SftpRetrieveFileTest extends SftpTest {
 
 		final String testFileContents = "some file contents";
 
-		String uploadedFileName = "/uploadFile";
+		String uploadedFileName = "uploadFile";
 		sftpChannel.put(new ByteArrayInputStream(testFileContents.getBytes()), uploadedFileName);
 
 		String downloadedFileName = "downLoadFile";
